@@ -26,14 +26,14 @@ from invenio.celery import celery
 @celery.task()
 def run_harvest(workflow, **kwargs):
     """Run given harvesting workflow in Celery."""
-    from invenio.modules.workflows.models import BibWorkflowObject
+    from invenio.modules.workflows.models import DbWorkflowObject
 
     args = {
         "workflow": workflow
     }
     args.update(**kwargs)
 
-    data = BibWorkflowObject.create_object()
+    data = DbWorkflowObject.create_object()
     extra_data = data.get_extra_data()
     extra_data["args"] = args
     data.set_extra_data(extra_data)

@@ -19,7 +19,7 @@
 
 """Signal receivers for workflows."""
 
-from invenio.modules.workflows.signals import workflow_halted
+from workflow.signals import workflow_halted
 
 
 def continue_workflow(sender, **extra):

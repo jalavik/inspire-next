@@ -22,7 +22,7 @@ from flask import Blueprint, jsonify, request
 
 from invenio.ext.cache import cache
 from invenio.base.globals import cfg
-from invenio.modules.workflows.models import BibWorkflowObject
+from invenio.modules.workflows.models import DbWorkflowObject
 
 
 blueprint = Blueprint(
@@ -46,7 +46,7 @@ def continue_workflow_callback():
 
     if id_object:
         callback_results = request_data.get("results", {})
-        workflow_object = BibWorkflowObject.query.get(id_object)
+        workflow_object = DbWorkflowObject.query.get(id_object)
         if workflow_object:
             results = request_data.get("results", [])
             for result in results:
@@ -82,7 +82,7 @@ def webcoll_callback():
     for rid in recids:
         if rid in pending_records:
             objectid = pending_records[rid]
-            workflow_object = BibWorkflowObject.query.get(objectid)
+            workflow_object = DbWorkflowObject.query.get(objectid)
             extra_data = workflow_object.get_extra_data()
             extra_data['url'] = join(cfg["CFG_ROBOTUPLOAD_SUBMISSION_BASEURL"], 'record', str(rid))
             extra_data['recid'] = rid

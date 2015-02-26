@@ -165,14 +165,14 @@ def match_record_HP_oaiharvest(kb_name):
 
 def delete_self_and_stop_processing(obj, eng):
     """Delete both versions of itself and stops the workflow."""
-    from invenio.modules.workflows.models import BibWorkflowObject
+    from invenio.modules.workflows.models import DbWorkflowObject
     # delete snapshot created with original data
-    initial_obj = BibWorkflowObject.query.filter(
-        BibWorkflowObject.id_parent == obj.id
+    initial_obj = DbWorkflowObject.query.filter(
+        DbWorkflowObject.id_parent == obj.id
     ).one()
-    BibWorkflowObject.delete(initial_obj.id)
+    DbWorkflowObject.delete(initial_obj.id)
     # delete self
-    BibWorkflowObject.delete(obj.id)
+    DbWorkflowObject.delete(obj.id)
     eng.skipToken()
 
 
@@ -181,7 +181,7 @@ def update_old_object(kb_name):
     @wraps(update_old_object)
     def _update_old_object(obj, eng):
         from inspire.utils.knowledge import get_value
-        from invenio.modules.workflows.models import BibWorkflowObject
+        from invenio.modules.workflows.models import DbWorkflowObject
 
         identifiers = []
         report_numbers = obj.get_data().get('report_number', [])
@@ -192,7 +192,7 @@ def update_old_object(kb_name):
 
         object_id = get_value(kb_name, identifiers)
         if object_id:
-            old_object = BibWorkflowObject.query.get(object_id)
+            old_object = DbWorkflowObject.query.get(object_id)
             if old_object:
                 # record waiting approval
                 old_object.set_data(obj.get_data())

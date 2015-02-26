@@ -43,7 +43,7 @@ from invenio.modules.workflows.tasks.workflows_tasks import (
     num_workflow_running_greater
 )
 
-from invenio.modules.workflows.tasks.logic_tasks import (
+from workflow.tasks.logic_tasks import (
     foreach,
     end_for,
     simple_for,

@@ -52,7 +52,7 @@ from inspire.modules.workflows.tasks.actions import (
     add_core_oaiharvest
 )
 
-from invenio.modules.workflows.tasks.logic_tasks import (
+from workflow.tasks.logic_tasks import (
     workflow_if,
     workflow_else,
 )

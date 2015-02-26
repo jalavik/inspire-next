@@ -27,7 +27,7 @@ import random
 def upload_step_marcxml(obj, eng):
     """Perform the upload step with MARCXML in obj.data().
 
-    :param obj: BibWorkflowObject to process
+    :param obj: DbWorkflowObject to process
     :param eng: BibWorkflowEngine processing the object
     """
     from invenio.base.globals import cfg

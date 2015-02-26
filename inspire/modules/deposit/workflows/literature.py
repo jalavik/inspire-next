@@ -39,7 +39,7 @@ from invenio.modules.classifier.tasks.classification import (
     classify_paper_with_deposit,
 )
 from invenio.modules.knowledge.api import get_kb_mappings
-from invenio.modules.workflows.tasks.logic_tasks import (
+from workflow.tasks.logic_tasks import (
     workflow_if,
     workflow_else,
 )
