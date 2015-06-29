@@ -1,24 +1,24 @@
 # -*- coding: utf-8 -*-
 #
-## This file is part of INSPIRE.
-## Copyright (C) 2014, 2015 CERN.
-##
-## INSPIRE is free software: you can redistribute it and/or modify
-## it under the terms of the GNU General Public License as published by
-## the Free Software Foundation, either version 3 of the License, or
-## (at your option) any later version.
-##
-## INSPIRE is distributed in the hope that it will be useful,
-## but WITHOUT ANY WARRANTY; without even the implied warranty of
-## MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-## GNU General Public License for more details.
-##
-## You should have received a copy of the GNU General Public License
-## along with INSPIRE. If not, see <http://www.gnu.org/licenses/>.
-##
-## In applying this license, CERN does not waive the privileges and immunities
-## granted to it by virtue of its status as an Intergovernmental Organization
-## or submit itself to any jurisdiction.
+# This file is part of INSPIRE.
+# Copyright (C) 2014, 2015 CERN.
+#
+# INSPIRE is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# INSPIRE is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with INSPIRE. If not, see <http://www.gnu.org/licenses/>.
+#
+# In applying this license, CERN does not waive the privileges and immunities
+# granted to it by virtue of its status as an Intergovernmental Organization
+# or submit itself to any jurisdiction.
 
 """World Scientific harvesting workflow."""
 
@@ -30,7 +30,8 @@ from ..tasks.world_scientific import (
     convert_files,
     create_collection,
     put_files_to_ftp,
-    report_via_email
+    report_via_email,
+    move_to_done
 )
 
 
@@ -58,6 +59,7 @@ class world_scientific(HarvestingWorkflowBase):
         put_files_to_ftp(
             server=ftp_server,
         ),
+        move_to_done("worldscientific/ws_done"),
         report_via_email(
             recipients=report_recipients,
             template="harvester/ftp_upload_notification.html"

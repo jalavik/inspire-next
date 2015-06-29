@@ -1,24 +1,24 @@
 # -*- coding: utf-8 -*-
 #
-## This file is part of INSPIRE.
-## Copyright (C) 2014, 2015 CERN.
-##
-## INSPIRE is free software: you can redistribute it and/or modify
-## it under the terms of the GNU General Public License as published by
-## the Free Software Foundation, either version 3 of the License, or
-## (at your option) any later version.
-##
-## INSPIRE is distributed in the hope that it will be useful,
-## but WITHOUT ANY WARRANTY; without even the implied warranty of
-## MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-## GNU General Public License for more details.
-##
-## You should have received a copy of the GNU General Public License
-## along with INSPIRE. If not, see <http://www.gnu.org/licenses/>.
-##
-## In applying this license, CERN does not waive the privileges and immunities
-## granted to it by virtue of its status as an Intergovernmental Organization
-## or submit itself to any jurisdiction.
+# This file is part of INSPIRE.
+# Copyright (C) 2014, 2015 CERN.
+#
+# INSPIRE is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# INSPIRE is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with INSPIRE. If not, see <http://www.gnu.org/licenses/>.
+#
+# In applying this license, CERN does not waive the privileges and immunities
+# granted to it by virtue of its status as an Intergovernmental Organization
+# or submit itself to any jurisdiction.
 
 from os.path import (
     join,
@@ -28,6 +28,7 @@ from os.path import (
 from functools import wraps
 from datetime import datetime
 from zipfile import BadZipfile
+from shutil import move
 from flask import render_template
 
 from harvestingkit.world_scientific_package import WorldScientific
@@ -66,7 +67,7 @@ def get_files_from_ftp(server, source_folder, target_folder):
 
 
 def unzip_files(target_folder):
-    """Unzip new files in data["new_files"] to target location.
+    """Unzip new files to target location.
 
     All extracted files are stored in data["extracted_files"].
     """
@@ -148,8 +149,17 @@ def create_collection(obj, eng):
     date = "_".join([d for d in [from_date, to_date] if d])
     obj.data['collections'] = {}
 
+    prefix_path = ""
+    if not obj.data.get("result_path"):
+        prefix_path = join(
+            cfg.get("HARVESTER_STORAGE_PREFIX"),
+            "worldscientific"
+        )
+    else:
+        prefix_path = obj.data.get("result_path")
+
     final_filename = join(
-        obj.data.get("result_path", cfg.get("HARVESTER_STORAGE_PREFIX")),
+        prefix_path,
         "world_scientific-{0}.{1}.xml".format(date, "insert")
     )
 
@@ -162,7 +172,9 @@ def create_collection(obj, eng):
                     infile = open(filename)
                     outfile.write(infile.read())
                 except IOError:
-                    obj.log.error('Unable to locate the file {0}'.format(filename))
+                    obj.log.error('Unable to locate the file {0}'.format(
+                        filename
+                    ))
                 finally:
                     infile.close()
             outfile.write('\n</collection>')
@@ -187,8 +199,26 @@ def put_files_to_ftp(server):
                 )
                 obj.log.info("Uploaded {0} to {1}".format(filename, server))
             else:
-                obj.log.info("(pretend) Uploaded to {0} to {1}".format(filename, server))
+                obj.log.info("(pretend) Uploaded to {0} to {1}".format(
+                    filename,
+                    server)
+                )
     return _put_files_to_ftp
+
+
+def move_to_done(target_folder):
+    """Upload files in data["collections"] to given FTP server."""
+    @wraps(put_files_to_ftp)
+    def _move_to_done(obj, eng):
+        target_folder_full = get_storage_path(suffix=target_folder)
+        collections = obj.data.get('collections', dict())
+        for filename in collections.values():
+            move(filename, join(target_folder_full, basename(filename)))
+            obj.log.info("Moved {0} to {1}".format(
+                filename,
+                target_folder_full)
+            )
+    return _move_to_done
 
 
 def report_via_email(recipients, template):
