@@ -74,6 +74,44 @@ def populate(records, collections, file_input=None):
 
 
 @manager.command
+def remove_bibxxx():
+    """Drop all the legacy bibxxx tables."""
+    from invenio.ext.sqlalchemy import db
+    table_names = db.engine.execute(
+        "SELECT TABLE_NAME"
+        " FROM INFORMATION_SCHEMA.TABLES"
+        " WHERE ENGINE='MyISAM'"
+        " AND TABLE_NAME LIKE '%%_bib%%x'"
+        " AND table_schema='{0}'".format(
+            current_app.config.get('CFG_DATABASE_NAME')
+        )
+    ).fetchall()
+    for table in table_names:
+        db.engine.execute("DROP TABLE {0}".format(table[0]))
+        print(">>> Dropped {0}.".format(table[0]))
+    print(">>> Removed {0} tables.".format(len(table_names)))
+
+
+@manager.command
+def remove_idx():
+    """Deop all the legacy BibIndex tables."""
+    from invenio.ext.sqlalchemy import db
+    table_names = db.engine.execute(
+        "SELECT TABLE_NAME"
+        " FROM INFORMATION_SCHEMA.TABLES"
+        " WHERE ENGINE='MyISAM'"
+        " AND TABLE_NAME LIKE 'idx%%'"
+        " AND table_schema='{0}'".format(
+            current_app.config.get('CFG_DATABASE_NAME')
+        )
+    ).fetchall()
+    for table in table_names:
+        db.engine.execute("DROP TABLE {0}".format(table[0]))
+        print(">>> Dropped {0}.".format(table[0]))
+    print(">>> Removed {0} tables.".format(len(table_names)))
+
+
+@manager.command
 def clean_records():
     """Truncate all the record tables."""
     print('>>> Truncating all records.')
