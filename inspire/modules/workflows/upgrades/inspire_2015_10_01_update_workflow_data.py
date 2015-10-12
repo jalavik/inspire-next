@@ -20,23 +20,63 @@
 # granted to it by virtue of its status as an Intergovernmental Organization
 # or submit itself to any jurisdiction.
 
+"""Migrate bibfield data model to new doJSON data model in workflows."""
+
+import six
+
 
 depends_on = []
 
 
 def info():
-    return "Migrate bibfield data model to new doJSON data model in workflows."
+    """Info about this upgrade."""
+    return __doc__
 
 
 def do_upgrade():
     """Implement your upgrades here."""
-    # TODO
-    pass
+    from invenio_workflows.models import BibWorkflowObject, Workflow
+    from invenio_deposit.models import Deposition
+
+    from inspire.dojson.utils import legacy_export_as_marc
+    from inspire.dojson.hep import hep2marc
+    from inspire.modules.workflows.dojson import bibfield
+    from inspire.modules.workflows.models import Payload
+
+    for deposit in BibWorkflowObject.query.filter(
+            BibWorkflowObject.module_name == "webdeposit"):
+        d = Deposition(deposit)
+        sip = d.get_latest_sip()
+        if sip:
+            sip.metadata = bibfield.do(sip.metadata)
+            sip.package = legacy_export_as_marc(hep2marc.do(sip.metadata))
+            d.save()
+
+    workflows = ["process_record_arxiv"]
+    workflow_objects = []
+    for workflow_name in workflows:
+        workflow_objects += BibWorkflowObject.query.join(
+            BibWorkflowObject.workflow).filter(Workflow.name == workflow_name).all()
+
+    for obj in workflow_objects:
+        metadata = obj.get_data()
+        if isinstance(metadata, six.string_types):
+            # Ignore records that have string as data
+            continue
+        if 'drafts' in metadata:
+            # New data model detected
+            continue
+        if hasattr(metadata, 'dumps'):
+            metadata = metadata.dumps(clean=True)
+        obj.data = bibfield.do(metadata)
+        payload = Payload.create(workflow_object=obj, type=obj.workflow.name)
+        payload.save()
 
 
 def estimate():
     """Estimate running time of upgrade in seconds (optional)."""
-    return 1
+    from invenio_workflows.models import BibWorkflowObject
+    return BibWorkflowObject.query.count()
 
 
 def pre_upgrade():
