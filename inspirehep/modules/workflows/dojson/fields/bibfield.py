@@ -24,6 +24,8 @@
 
 from __future__ import absolute_import, print_function, unicode_literals
 
+import six
+
 from dojson import utils
 
 from ..model import bibfield
@@ -168,6 +170,8 @@ def titles(self, key, value):
             values = value
         out = []
         for val in values:
+            if isinstance(val, six.string_types):
+                val = {"title": val}
             out.append({
                 'title': val.get('title'),
                 'subtitle': val.get('subtitle'),
@@ -225,6 +229,8 @@ def hidden_notes(self, key, value):
 @utils.for_each_value
 def public_notes(self, key, value):
     """Get public notes from object."""
+    if isinstance(value, six.string_types):
+        value = {"value": value}
     return value
 
 
@@ -309,6 +315,8 @@ def thesis_supervisor(self, key, value):
 @utils.for_each_value
 def title_translation(self, key, value):
     """Get translated title from object."""
+    if isinstance(value, six.string_types):
+        value = {"value": value}
     return {
         "title": value.get('value'),
         "subtitle": value.get('subtitle'),
@@ -325,6 +333,8 @@ def title_arxiv(self, key, value):
             values = value
         out = []
         for val in values:
+            if isinstance(val, six.string_types):
+                val = {"title": val}
             out.append({
                 'title': val.get('title'),
                 'subtitle': val.get('subtitle'),
@@ -367,6 +377,17 @@ def titles_old(self, key, value):
 @utils.for_each_value
 def publication_info(self, key, value):
     """Get pubinfo from object."""
+    if value and isinstance(value, dict):
+        if value.get('journal_issue') == 'issue':
+            del value['journal_issue']
+        if value.get('journal_title') == 'journal title':
+            del value['journal_title']
+        if value.get('journal_volume') == 'volume':
+            del value['journal_volume']
+        if value.get('page_artid') == 'page range':
+            del value['page_artid']
+        if value.get('year') == 'year':
+            del value['year']
     return value
 
 

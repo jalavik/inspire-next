@@ -28,8 +28,9 @@ from celery.utils.log import get_task_logger
 
 import gzip
 import re
+import traceback
 
-from six import text_type
+from six import text_type, string_types
 
 from flask import current_app
 from dojson.contrib.marc21.utils import create_record as marc_create_record
@@ -45,6 +46,20 @@ from inspirehep.dojson.institutions import institutions
 from inspirehep.dojson.jobs import jobs
 from inspirehep.dojson.journals import journals
 from inspirehep.dojson.processors import _collection_in_record
+
+from invenio_workflows.registry import workflows
+from invenio_workflows.models import (
+    BibWorkflowObject,
+    Workflow,
+    ObjectVersion
+)
+from invenio_deposit.models import Deposition
+
+from inspirehep.dojson.utils import legacy_export_as_marc
+from inspirehep.dojson.hep import hep2marc
+from inspirehep.modules.workflows.dojson import bibfield
+from inspirehep.modules.workflows.models import Payload
+
 from invenio_ext.sqlalchemy import db
 from invenio_ext.es import es
 
@@ -220,3 +235,99 @@ def create_record(data, force=False, dry_run=False):
             db.session.merge(prod_record)
             logger.exception("Error in elaborating record ID {}".format(recid))
         raise
+
+
+@celery.task(ignore_result=True)
+def migrate_workflow_object(obj_id):
+    try:
+        obj = BibWorkflowObject.query.get(obj_id)
+        rename_object_action(obj)
+        if obj.workflow.name == "process_record_arxiv":
+            metadata = obj.get_data()
+            if isinstance(metadata, string_types):
+                # Ignore records that have string as data
+                return
+            if 'drafts' in metadata:
+                # New data model detected, just save and exit
+                obj.save()
+                return
+            if hasattr(metadata, 'dumps'):
+                metadata = metadata.dumps(clean=True)
+            obj.data = bibfield.do(metadata)
+            payload = Payload.create(
+                type=obj.workflow.name,
+                workflow_object=obj
+            )
+            payload.save()
+        elif obj.workflow.name == "literature":
+            d = Deposition(obj)
+            sip = d.get_latest_sip()
+            if sip:
+                sip.metadata = bibfield.do(sip.metadata)
+                sip.package = legacy_export_as_marc(hep2marc.do(sip.metadata))
+                d.save()
+        else:
+            obj.save()  # To update and trigger indexing
+        reset_workflow_object_states(obj)
+    except Exception as err:
+        from flask import current_app
+        current_app.logger.error("Problem migrating record {0}".format(obj_id))
+        current_app.logger.exception(err)
+        msg = "Error: %r\n%s" % \
+              (err, traceback.format_exc())
+        obj.set_error_message(str(err), msg)
+        obj.save(version=ObjectVersion.ERROR)
+        raise
+
+
+def rename_object_action(obj):
+    if obj.get_action() == "arxiv_approval":
+        obj.set_action("hep_approval", obj.get_action_message())
+
+
+def reset_workflow_object_states(obj):
+    """Fix workflow positions and states.
+
+    Old states from Prod/QA:
+    {(), (0,), (5, 3, 14), (5, 3, 14, 0), (5, 3, 15), (5, 3, 15, 1)}
+
+    {(),
+     (0,),
+     (5,),
+     (5, 3, 1),
+     (5, 3, 10),
+     (5, 3, 11),
+     (5, 3, 12),
+     (5, 3, 14),
+     (5, 3, 14, 0),
+     (6, 3, 4)}
+
+    OLD -> NEW
+    5, 3, 14 -> 0 end
+    5, 3, 10 -> 14, 0 halted
+    """
+    pos = obj.get_current_task()
+    if obj.version == ObjectVersion.COMPLETED:
+        obj.save(task_counter=[len(workflows.get(obj.workflow.name).workflow) - 1])
+        return
+    elif obj.version == ObjectVersion.RUNNING:
+        # Running? Nah that cannot be.
+        obj.version = ObjectVersion.ERROR
+    try:
+        obj.get_current_task_info()
+    except IndexError:
+        # The current task counter is Invalid
+        obj.version = ObjectVersion.ERROR
+
+    if obj.workflow.name == "process_record_arxiv":
+        if tuple(pos) in [
+                (5,), (5, 3, 14), (5, 3, 14, 0), (5, 3, 15), (5, 3, 15, 1)]:
+            pos = [len(workflows.get(obj.workflow.name).workflow) - 1]  # finished
+        elif tuple(pos) in [(5, 3, 10), (5, 3, 11), (5, 3, 12)]:
+            pos = [14, 0]  # halted
+        elif len(pos) > 1 and pos[0] == 6:
+            # We need to update pos from 6 to start of pre_processing part
+            pos = [7]
+        else:
+            pos = [0]  # Nothing here, we go to start
+        return pos
