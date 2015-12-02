@@ -31,17 +31,26 @@
 {% endmacro %}
 
 
+{% macro get_paper_date(record) %}
+    {% if record.preprint_date %}
+        <span> {{ record.preprint_date }}</span>
+    {% endif %}
+{% endmacro %}
+
+
 {% macro get_arxiv_id(record) %}
-    {% if ':' in record['arxiv_eprints.value'][0] %}
-        {{ record['arxiv_eprints.value'][0][6:] }}
-    {% else %}
-      {{ record['arxiv_eprints.value'][0] }}
+    {% if record.arxiv_eprints %}
+        {% if record['arxiv_eprints.value'][0] and 'oai:arXiv.org:' in record['arxiv_eprints.value'][0] %}
+           {{ record['arxiv_eprints.value'][0][14:] }}
+        {% elif 'arXiv:' in record['arxiv_eprints.value'][0] %}
+           {{ record['arxiv_eprints.value'][0][6:] }}
+        {% else %}
+           {{ record['arxiv_eprints.value'][0] }}
+        {% endif %}
     {% endif %}
 {% endmacro %}
 
 
 {% macro get_abstract(record) %}
-    {% if record.abstracts %}
-       {{ record['abstracts'][0]['value'] }}
-    {% endif %}
+    {{ record['abstracts'][0]['value'] }}
 {% endmacro %}
