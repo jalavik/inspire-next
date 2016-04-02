@@ -98,6 +98,7 @@ tests_require = [
     'pytest-cache>=1.0',
     'pytest-cov>=1.8.0',
     'pytest-pep8>=1.0.6',
+    'pytest-runner>=2.7.0',
     'pytest>=2.8.0',
     'mock>=1.3.0',
     # 'Flask-Testing>=0.4.2', # Was on INSPIRE overlay, not needed?
@@ -141,39 +142,6 @@ setup_requires = [
 ]
 
 packages = find_packages(exclude=['docs'])
-
-
-class PyTest(TestCommand):
-
-    """PyTest Test."""
-
-    user_options = [('pytest-args=', 'a', "Arguments to pass to py.test")]
-
-    def initialize_options(self):
-        """Init pytest."""
-        TestCommand.initialize_options(self)
-        self.pytest_args = []
-        try:
-            from ConfigParser import ConfigParser
-        except ImportError:
-            from configparser import ConfigParser
-        config = ConfigParser()
-        config.read('pytest.ini')
-        self.pytest_args = config.get('pytest', 'addopts').split(' ')
-
-    def finalize_options(self):
-        """Finalize pytest."""
-        TestCommand.finalize_options(self)
-        self.test_args = []
-        self.test_suite = True
-
-    def run_tests(self):
-        """Run tests."""
-        # import here, cause outside the eggs aren't loaded
-        import pytest
-        errno = pytest.main(self.pytest_args)
-        sys.exit(errno)
-
 
 # Load __version__, should not be done using import.
 # http://python-packaging-user-guide.readthedocs.org/en/latest/tutorial.html
@@ -263,5 +231,4 @@ setup(
         ],
     },
     tests_require=tests_require,
-    cmdclass={'test': PyTest}
 )
