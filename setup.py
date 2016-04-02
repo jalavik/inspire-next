@@ -195,6 +195,7 @@ setup(
             'inspire_search = inspirehep.modules.search:INSPIRESearch',
             'inspire_authors = inspirehep.modules.authors:INSPIREAuthors',
             'inspire_forms = inspirehep.modules.forms:INSPIREForms',
+            'inspire_workflows = inspirehep.modules.workflows:INSPIREWorkflows',
         ],
         'invenio_assets.bundles': [
             'inspirehep_theme_css = inspirehep.modules.theme.bundles:css',

@@ -34,10 +34,10 @@ from invenio_deposit.models import (
     InvalidDepositionType,
 )
 from invenio_deposit.storage import Storage
-
 from invenio_formatter import format_record
-
 from inspirehep.utils.helpers import get_record_from_model
+
+from .utils import get_classification_from_task_results
 
 
 def create_payload(obj, eng):
@@ -56,7 +56,7 @@ class PayloadStorage(Storage):
     def __init__(self, payload_id):
         """Initialize storage."""
         self.fs_path = os.path.join(
-            cfg['WORKFLOWS_STORAGEDIR'],
+            current_app.config['WORKFLOWS_STORAGEDIR'],
             str(payload_id)
         )
 
@@ -77,7 +77,7 @@ class Payload(Deposition):
     @classmethod
     def get_type(self, type_or_id):
         """Get type."""
-        from invenio_workflows.registry import workflows
+        from invenio_workflows.proxies import workflows
         return workflows.get(type_or_id)
 
     @classmethod
@@ -170,9 +170,8 @@ class SIPWorkflowMixin(object):
     @classmethod
     def get_additional(cls, obj, **kwargs):
         """Return the value to put in the additional column of HoldingPen."""
-        from inspirehep.modules.predicter.utils import get_classification_from_task_results
         keywords = get_classification_from_task_results(obj)
-        results = obj.get_tasks_results()
+        results = obj.extra_data["_tasks_results"]
         prediction_results = results.get("arxiv_guessing", {})
         if prediction_results:
             prediction_results = prediction_results[0].get("result")
@@ -206,7 +205,7 @@ class SIPWorkflowMixin(object):
     @classmethod
     def get_sort_data(cls, obj, **kwargs):
         """Return a dictionary useful for sorting in Holding Pen."""
-        results = obj.get_tasks_results()
+        results = obj.extra_data["_tasks_results"]
         prediction_results = results.get("arxiv_guessing", {})
         if prediction_results:
             prediction_results = prediction_results[0].get("result")

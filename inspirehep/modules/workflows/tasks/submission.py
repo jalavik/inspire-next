@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 #
 # This file is part of INSPIRE.
-# Copyright (C) 2014, 2015, 2016 CERN.
+# Copyright (C) 2014, 2015 CERN.
 #
 # INSPIRE is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -22,11 +22,102 @@
 
 """Contains INSPIRE specific submission tasks"""
 
-from retrying import retry
-
-from flask import current_app
+import os
 
 from functools import wraps
+from flask import render_template
+from flask_login import current_user
+
+from invenio_deposit.models import Deposition
+from invenio_formatter import format_record
+
+from inspirehep.utils.helpers import get_record_from_obj
+
+from retrying import retry
+
+
+def halt_to_render(obj, eng):
+    """Halt the workflow - waiting to be resumed."""
+    deposition = Deposition(obj)
+    sip = deposition.get_latest_sip(sealed=False)
+    deposition.set_render_context(dict(
+        template_name_or_list="deposit/completed.html",
+        deposition=deposition,
+        deposition_type=(
+            None if deposition.type.is_default() else
+            deposition.type.get_identifier()
+        ),
+        uuid=deposition.id,
+        sip=sip,
+        my_depositions=Deposition.get_depositions(
+            current_user, type=deposition.type
+        ),
+        format_record=format_record,
+    ))
+    obj.last_task = "halt_to_render"
+    eng.halt("User submission complete.")
+
+
+def get_ticket_body(template, deposition, metadata, email, obj):
+    """
+    Get ticket content.
+
+    Ticket used by the curator to get notified about the new submission.
+    """
+    subject = ''.join(["Your suggestion to INSPIRE: ", deposition.title])
+    user_comment = obj.extra_data.get('submission_data').get('extra_comments')
+    body = render_template(
+        template,
+        email=email,
+        title=deposition.title,
+        identifier=metadata.get("external_system_numbers", [{}])[0].get("value", ""),
+        user_comment=user_comment,
+        references=obj.extra_data.get("submission_data", {}).get("references"),
+        object=obj,
+    ).strip()
+
+    return subject, body
+
+
+def get_curation_body(template, record, email, extra_data):
+    """
+    Get ticket content.
+
+    Ticket used by curators to curate the given record.
+    """
+    from idutils import is_arxiv_post_2007
+
+    recid = extra_data.get('recid')
+    record_url = extra_data.get('url')
+
+    arxiv_ids = record.get('arxiv_eprints.value') or []
+    for index, arxiv_id in enumerate(arxiv_ids):
+        if arxiv_id and is_arxiv_post_2007(arxiv_id):
+            arxiv_ids[index] = 'arXiv:{0}'.format(arxiv_id)
+
+    report_numbers = record.get('report_numbers.value') or []
+    dois = ["doi:{0}".format(record.get('dois.value'))]
+    link_to_pdf = extra_data.get('submission_data').get('pdf')
+
+    subject = ' '.join(filter(
+        lambda x: x is not None,
+        arxiv_ids + dois + report_numbers + ['(#{0})'.format(recid)]
+    ))
+
+    references = extra_data.get('submission_data').get('references')
+    user_comment = extra_data.get('submission_data').get('extra_comments')
+
+    body = render_template(
+        template,
+        recid=recid,
+        record_url=record_url,
+        link_to_pdf=link_to_pdf,
+        email=email,
+        references=references,
+        user_comment=user_comment,
+    ).strip()
+
+    return subject, body
 
 
 @retry(stop_max_attempt_number=5, wait_fixed=10000)
@@ -37,7 +128,7 @@ def submit_rt_ticket(obj, queue, subject, body, requestors, ticket_id_key):
     # Trick to prepare ticket body
     body = "\n ".join([line.strip() for line in body.split("\n")])
     rt_instance = get_instance() if current_app.config.get("PRODUCTION_MODE") else None
-    rt_queue = current_app.config.get("CFG_BIBCATALOG_QUEUES") or queue
+    rt_queue = current_app.config.get("current_app.config_BIBCATALOG_QUEUES") or queue
     recid = obj.extra_data.get("recid", "")
     if not recid:
         recid = obj.data.get("recid", "")
@@ -60,14 +151,114 @@ def submit_rt_ticket(obj, queue, subject, body, requestors, ticket_id_key):
     return True
 
 
-def halt_record_with_action(action, message):
-    """Halt the record and set an action (with message)."""
-    @wraps(halt_record_with_action)
-    def _halt_record(obj, eng):
-        """Halt the workflow for approval."""
-        eng.halt(action=action,
-                 msg=message)
-    return _halt_record
+def create_curation_ticket(template, queue="Test", ticket_id_key="ticket_id"):
+    """Create a ticket for curation.
+
+    Creates the ticket in the given queue and stores the ticket ID
+    in the extra_data key specified in ticket_id_key."""
+    @wraps(create_ticket)
+    def _create_curation_ticket(obj, eng):
+        from invenio_access.control import acc_get_user_email
+
+        requestors = acc_get_user_email(obj.id_user)
+        record = get_record_from_obj(obj, eng)
+
+        if obj.extra_data.get("core"):
+            subject, body = get_curation_body(template,
+                                              record,
+                                              requestors,
+                                              obj.extra_data)
+            submit_rt_ticket(obj,
+                             queue,
+                             subject,
+                             body,
+                             requestors,
+                             ticket_id_key)
+    return _create_curation_ticket
+
+
+def create_ticket(template, queue="Test", ticket_id_key="ticket_id"):
+    """Create a ticket for the submission.
+
+    Creates the ticket in the given queue and stores the ticket ID
+    in the extra_data key specified in ticket_id_key."""
+    @wraps(create_ticket)
+    def _create_ticket(obj, eng):
+        from invenio_access.control import acc_get_user_email
+
+        deposition = Deposition(obj)
+        requestors = acc_get_user_email(obj.id_user)
+
+        subject, body = get_ticket_body(template,
+                                        deposition,
+                                        deposition.get_latest_sip(sealed=True).metadata,
+                                        requestors,
+                                        obj)
+        submit_rt_ticket(obj,
+                         queue,
+                         subject,
+                         body,
+                         requestors,
+                         ticket_id_key)
+    return _create_ticket
+
+
+def reply_ticket(template=None, keep_new=False):
+    """Reply to a ticket for the submission."""
+    @wraps(reply_ticket)
+    def _reply_ticket(obj, eng):
+        from invenio_accounts.models import User
+        from invenio_workflows.errors import WorkflowError
+        from inspirehep.utils.tickets import get_instance
+
+        ticket_id = obj.extra_data.get("ticket_id", "")
+        if not ticket_id:
+            obj.log.error("No ticket ID found!")
+            return
+
+        if template:
+            # Body rendered by template.
+            deposition = Deposition(obj)
+            user = User.query.get(obj.id_user)
+
+            context = {
+                "object": obj,
+                "user": user,
+                "title": deposition.title,
+                "reason": obj.extra_data.get("reason", ""),
+                "record_url": obj.extra_data.get("url", ""),
+            }
+
+            body = render_template(
+                template,
+                **context
+            )
+        else:
+            # Body already rendered in reason.
+            body = obj.extra_data.get("reason").strip()
+        if not body:
+            raise WorkflowError("No body for ticket reply", eng.uuid, obj.id)
+        # Trick to prepare ticket body
+        body = "\n ".join([line.strip() for line in body.strip().split("\n")])
+
+        rt = get_instance()
+        if not rt:
+            obj.log.error("No RT instance available. Skipping!")
+        else:
+            rt.reply(
+                ticket_id=ticket_id,
+                text=body,
+            )
+            obj.log.info("Reply created:\n{0}".format(
+                body.encode("utf-8", "ignore")
+            ))
+            if keep_new:
+                # We keep the state as new
+                rt.edit_ticket(
+                    ticket_id=ticket_id,
+                    Status="new"
+                )
+    return _reply_ticket
 
 
 def close_ticket(ticket_id_key="ticket_id"):
@@ -97,3 +288,104 @@ def close_ticket(ticket_id_key="ticket_id"):
                     raise
                 obj.log.warning("Ticket is already resolved.")
     return _close_ticket
+
+
+def halt_record_with_action(action, message):
+    """Halt the record and set an action (with message)."""
+    @wraps(halt_record_with_action)
+    def _halt_record(obj, eng):
+        """Halt the workflow for approval."""
+        eng.halt(action=action,
+                 msg=message)
+    return _halt_record
+
+
+def send_robotupload(url=None,
+                     callback_url="callback/workflows/continue",
+                     mode="insert"):
+    """Get the MARCXML from the model and ship it."""
+    @wraps(send_robotupload)
+    def _send_robotupload(obj, eng):
+        from invenio_workflows.errors import WorkflowError
+        from inspirehep.utils.robotupload import make_robotupload_marcxml
+
+        combined_callback_url = os.path.join(current_app.config["SERVER_NAME"], callback_url)
+        model = eng.workflow_definition.model(obj)
+        sip = model.get_latest_sip()
+        marcxml = sip.package
+        result = make_robotupload_marcxml(
+            url=url,
+            marcxml=marcxml,
+            callback_url=combined_callback_url,
+            mode=mode,
+            nonce=obj.id
+        )
+        if "[INFO]" not in result.text:
+            if "cannot use the service" in result.text:
+                # IP not in the list
+                obj.log.error("Your IP is not in "
+                              "current_app.config_BATCHUPLOADER_WEB_ROBOT_RIGHTS "
+                              "on host")
+                obj.log.error(result.text)
+            txt = "Error while submitting robotupload: {0}".format(result.text)
+            raise WorkflowError(txt, eng.uuid, obj.id)
+        else:
+            obj.log.info("Robotupload sent!")
+            obj.log.info(result.text)
+            eng.halt("Waiting for robotupload: {0}".format(result.text))
+        obj.log.info("end of upload")
+    return _send_robotupload
+
+
+def add_files_to_task_results(obj, eng):
+    """Add Deposition attached files to task results."""
+    deposition = Deposition(obj)
+    for file_obj in deposition.files:
+        fileinfo = {
+            "type": "file",
+            "filename": file_obj.name,
+            "full_path": file_obj.get_syspath(),
+        }
+        obj.add_task_result(file_obj.name,
+                            fileinfo,
+                            "workflows/results/files.html")
+
+
+def add_note_entry(obj, eng):
+    """Add note entry to sip metadata on approval."""
+    entry = {'value': '*Temporary entry*'} if obj.extra_data.get("core") \
+        else {'value': '*Brief entry*'}
+    deposition = Deposition(obj)
+    metadata = deposition.get_latest_sip().metadata
+    if metadata.get('public_notes') is None or not isinstance(metadata.get("public_notes"), list):
+        metadata['public_notes'] = [entry]
+    else:
+        metadata['public_notes'].append(entry)
+    deposition.update()
+
+
+def user_pdf_get(obj, eng):
+    """Upload user PDF file, if requested."""
+    if obj.extra_data.get('pdf_upload', False):
+        fft = {'url': obj.extra_data.get('submission_data').get('pdf'),
+               'docfile_type': 'INSPIRE-PUBLIC'}
+        deposition = Deposition(obj)
+        metadata = deposition.get_latest_sip().metadata
+        if metadata.get('fft'):
+            metadata['fft'].append(fft)
+        else:
+            metadata['fft'] = [fft]
+        deposition.update()
+        obj.log.info("PDF file added to FFT.")
+
+
+def finalize_record_sip(processor):
+    """Finalize the SIP by generating the MARC and storing it in the SIP."""
+    @wraps(finalize_record_sip)
+    def _finalize_sip(obj, eng):
+        from inspirehep.dojson.utils import legacy_export_as_marc
+        model = eng.workflow_definition.model(obj)
+        sip = model.get_latest_sip()
+        sip.package = legacy_export_as_marc(processor.do(sip.metadata))
+        model.update()
+    return _finalize_sip

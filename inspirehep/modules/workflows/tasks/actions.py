@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 #
 # This file is part of INSPIRE.
-# Copyright (C) 2016 CERN.
+# Copyright (C) 2014, 2015 CERN.
 #
 # INSPIRE is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -43,7 +43,7 @@ def shall_halt_workflow(obj, *args, **kwargs):
 
 def shall_push_remotely(*args, **kwargs):
     """Check if the record shall be robotuploaded."""
-    return current_app.config.get("CFG_SITE_URL") != \
+    return current_app.config.get("SERVER_NAME") != \
         current_app.config.get("CFG_ROBOTUPLOAD_SUBMISSION_BASEURL")
 
 
@@ -96,7 +96,7 @@ def reject_record(message):
         from inspirehep.modules.audit.api import log_prediction_action
 
         # Audit logging
-        results = obj.get_tasks_results()
+        results = obj.extra_data["_tasks_results"]
         prediction_results = results.get("arxiv_guessing", {})
         log_prediction_action(
             action="reject_record",
@@ -114,10 +114,10 @@ def reject_record(message):
 
 def is_record_relevant(obj, *args, **kwargs):
     """Shall we halt this workflow for potential acceptance or just reject?"""
-    from inspirehep.modules.predicter.utils import (
+    from inspirehep.modules.workflows.utils import (
         get_classification_from_task_results,
     )
-    results = obj.get_tasks_results()
+    results = obj.extra_data["_tasks_results"]
     prediction_results = results.get("arxiv_guessing", {})
     classification_results = get_classification_from_task_results(obj)
 
