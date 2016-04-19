@@ -31,13 +31,20 @@ Defaults to ``<env_prefix>_STATIC_FOLDER`` or if environment variable is not
 set ``<sys.prefix>/var/<app_name>-instance/static``.
 """
 
-create_api = create_app_factory(
-    'inspirehep',
-    config_loader=config_loader,
-    blueprint_entry_points=['invenio_base.api_blueprints'],
-    extension_entry_points=['invenio_base.api_apps'],
-    instance_path=instance_path,
-)
+
+def create_api(*args, **kwargs):
+    """Special create API having Flask-Login."""
+    app = create_app_factory(
+        'inspirehep',
+        config_loader=config_loader,
+        blueprint_entry_points=['invenio_base.api_blueprints'],
+        extension_entry_points=['invenio_base.api_apps'],
+        instance_path=instance_path,
+    )(*args, **kwargs)
+
+    from flask_login import LoginManager
+    LoginManager(app)
+    return app
 
 
 create_app = create_app_factory(
