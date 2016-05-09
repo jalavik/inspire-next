@@ -39,7 +39,16 @@ def spawn_arXiv_workflow_from_oai_harvest(request, records, name, **kwargs):
     from flask import current_app
     from invenio_workflows import start, workflows
 
-    if not request.endpoint == "http://export.arxiv.org/oai2":
+    if request.endpoint not in [
+            "http://export.arxiv.org/oai2", "http://arxiv.org/oai2"
+            ]:
+        # This is not arXiv
+        return
+
+    spider = kwargs.get('spider')
+    workflow = kwargs.get('workflow')
+    if spider or workflow:
+        # Taken care of by inspire-crawler
         return
 
     workflow = "arxiv_ingestion"
