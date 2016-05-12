@@ -102,7 +102,10 @@ def categories(self, key, value):
 
 @literature.over('collaboration', '^collaboration$')
 def collaboration(self, key, value):
-    return value
+    collabs = utils.force_list(value)
+    return [
+        {'value': coll} for coll in collabs
+    ]
 
 
 @literature.over('hidden_notes', '^hidden_note$')
