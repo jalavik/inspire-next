@@ -825,6 +825,7 @@ WORKFLOWS_DEFAULT_FILE_LOCATION_NAME = "holdingpen"
 """Name of default workflow Location reference."""
 
 WORKFLOWS_UI_BASE_TEMPLATE = BASE_TEMPLATE
+WORKFLOWS_UI_INDEX_TEMPLATE = "inspire_workflows/index.html"
 WORKFLOWS_UI_LIST_TEMPLATE = "inspire_workflows/list.html"
 WORKFLOWS_UI_DETAILS_TEMPLATE = "inspire_workflows/details.html"
 WORKFLOWS_UI_LIST_ROW_TEMPLATE = "inspire_workflows/list_row.html"
