@@ -35,6 +35,24 @@ from inspirehep.dojson.utils import get_recid_from_ref, classify_field
 
 @before_record_insert.connect
 @before_record_update.connect
+def integer_check(sender, *args, **kwargs):
+    """Update int() fields."""
+    for idx, field in enumerate(sender.get('references', [])):
+        if 'number' in field and not isinstance(field['number'], int):
+            sender['references'][idx]['number'] = int(field['number'])
+        if 'year' in field and not isinstance(field['year'], int) and len(field['year']) == 4:
+            sender['references'][idx]['year'] = int(field['year'])
+
+    for idx, field in enumerate(sender.get('publication_info', [])):
+        if 'year' in field and not isinstance(field['year'], int) and len(field['year']) == 4:
+            sender['publication_info'][idx]['year'] = int(field['year'])
+        if 'year' in field and not field['year']:
+            # Remove empty string in year
+            del sender['publication_info'][idx]['year']
+
+
+@before_record_insert.connect
+@before_record_update.connect
 def normalize_field_categories(sender, *args, **kwargs):
     """Normalize field_categories."""
     for idx, field in enumerate(sender.get('field_categories', [])):
